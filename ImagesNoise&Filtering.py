@@ -3,8 +3,6 @@ import math
 import cv2
 import numpy as np
 from PIL import Image
-import matplotlib.pyplot as plt
-
 
 # Fonction pour générer du bruit gaussien
 def bruit_gaussien(mu, sigma, largeur, hauteur):
@@ -29,116 +27,122 @@ def bruit_poivre_et_sel(image, prob):
                 noisy_image[i][j] = 255  # Sel
     return noisy_image
 
+# Filtre médian
+def filtre_median(img, window_size):
+    m, n = img.shape
+    offset = window_size // 2
+    img_new = np.zeros([m, n])
 
-# filtre moyen
+    for i in range(m):
+        for j in range(n):
+            window = []
+            for k in range(-offset, offset + 1):
+                for l in range(-offset, offset + 1):
+                    if 0 <= i + k < m and 0 <= j + l < n:
+                        window.append(img[i + k, j + l])
+
+            window.sort()
+            median = window[len(window) // 2]
+            img_new[i, j] = median
+
+    return np.clip(img_new, 0, 255).astype(np.uint8)
+
+# Filtre moyen
 def filtre_moyen(img, t):
     m, n = img.shape
-    mask = np.ones([t, t], dtype = int)
-    mask = mask / t**2
-
+    mask = np.ones([t, t], dtype=int) / t ** 2
     img_new = np.zeros([m, n])
-    for i in range(1, m-1):
-        for j in range(1, n-1):
-            temp = img[i-1, j-1]*mask[0, 0]+img[i-1, j]*mask[0, 1]+img[i-1, j + 1]*mask[0, 2]+img[i, j-1]*mask[1, 0]+ img[i, j]*mask[1, 1]+img[i, j + 1]*mask[1, 2]+img[i + 1, j-1]*mask[2, 0]+img[i + 1, j]*mask[2, 1]+img[i + 1, j + 1]*mask[2, 2]
-            img_new[i, j]= temp
-
+    for i in range(1, m - 1):
+        for j in range(1, n - 1):
+            temp = np.sum(img[i - 1:i + 2, j - 1:j + 2] * mask)
+            img_new[i, j] = temp
     return img_new
 
-
+# Filtre gaussien
 def filtre_gaussian(image, sigma, kernel_size=5):
-    image_data = np.array(image)
-    
-    # If the image is grayscale, convert it to a 3-channel image (for consistency)
-    if len(image_data.shape) == 2:
-        noisy_image = cv2.cvtColor(image_data, cv2.COLOR_GRAY2BGR)
-    else:
-        noisy_image = image_data
-    # Apply Gaussian filter
-    filtered_image = cv2.GaussianBlur(noisy_image, (kernel_size, kernel_size), sigma)
-    
-    return filtered_image
+    noisy_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) if len(image.shape) == 2 else image
+    return cv2.GaussianBlur(noisy_image, (kernel_size, kernel_size), sigma)
 
+# Fonction PSNR
 def peack_signal_noise_ration(img_origin, img_bruit):
-    m, n = img_origin.shape
-    some = 0
-    r = 255
-    for i in range(1, m-1):
-        for j in range(1, n-1):
-            some = some + (img_origin[i, j] - img_bruit[i, j]) ** 2
+    img_origin, img_bruit = img_origin.astype(np.float64), img_bruit.astype(np.float64)
+    mse = np.mean((img_origin - img_bruit) ** 2)
+    if mse == 0:
+        return float('inf')
+    psnr = 10 * math.log10(255 ** 2 / mse)
+    print('PSNR:', psnr)
 
-    pnsr = 10 * math.log10(r ** 2 / (some / (m * n)))
-    print('peack signal noise ration (PSNR) :', pnsr)
+# Fonction de filtre Min-Max
+def filtre_min_max(img, window_size):
+    m, n = img.shape
+    offset = window_size // 2
+    img_new = np.zeros([m, n])
 
+    for i in range(m):
+        for j in range(n):
+            window = []
+            for k in range(-offset, offset + 1):
+                for l in range(-offset, offset + 1):
+                    if 0 <= i + k < m and 0 <= j + l < n:
+                        window.append(img[i + k, j + l])
 
-# Load and convert the image
-image_path = 'ford-mustang.jpg'
+            i_min = min(window)
+            i_max = max(window)
+
+            # Application de la règle min-max
+            if img[i, j] < i_min:
+                img_new[i, j] = i_min
+            elif img[i, j] > i_max:
+                img_new[i, j] = i_max
+            else:
+                img_new[i, j] = img[i, j]
+
+    return np.clip(img_new, 0, 255).astype(np.uint8)
+
+# Charger l'image
+image_path = 'image_poivre_sel.png'
 image = Image.open(image_path).convert("L")
 image_data = np.array(image)
 
-# Noise parameters
-mu = 0
+# Choix du type de bruit ou de filtre
+print("Enter the type of noise or filter you want ? g = Gaussian noise, sp = Salt and Pepper noise, fm = Mean filter, fg = Gaussian filter, fme = Median filter, fmm = Min-Max filter")
+wanted = input().strip()
 
-hauteur, largeur = image_data.shape
-
-wanted = print("Enter the type of noise or filtre you want ? g = Gaussian noise, sp = Salt and Pepper noise :, fm = Mean filter, fg = Gaussian filter")
-wanted = str(input())
 if wanted == "g":
-    sigma = print("Enter the value of sigma: ")
-    sigma = float(input()) 
-    # Generate Gaussian noise and add to the image
-    bruit = bruit_gaussien(mu, sigma, largeur, hauteur)
+    sigma = float(input("Enter the value of sigma: "))
+    bruit = bruit_gaussien(0, sigma, image_data.shape[1], image_data.shape[0])
     image_gaussienne = np.clip(image_data + bruit, 0, 255).astype(np.uint8)
-    cv2.imshow('Image Originale', image_data)
-    cv2.imshow(f'Image avec Bruit Gaussien avec sigma {sigma} ', image_gaussienne)
+    cv2.imwrite('image_gaussienne.png', image_gaussienne)
     peack_signal_noise_ration(image_data, image_gaussienne)
-    
+
 elif wanted == "sp":
     prob = 0.05
-    # Add salt-and-pepper noise
     image_poivre_sel = bruit_poivre_et_sel(image_data, prob)
-    cv2.imshow('Image Originale', image_data)
-    cv2.imshow(f'Image avec Bruit Poivre et Sel avec prob de {prob}', image_poivre_sel)
+    cv2.imwrite('image_poivre_sel.png', image_poivre_sel)
     peack_signal_noise_ration(image_data, image_poivre_sel)
-    
+
 elif wanted == "fm":
-    image_filtre_moyen = filtre_moyen(image_data , 3)
-    cv2.imshow('Image Originale', image_data)
-    cv2.imshow('Image avec Filtre Moyen', image_filtre_moyen.astype(np.uint8))
+    image_filtre_moyen = filtre_moyen(image_data, 3)
+    cv2.imwrite('image_filtre_moyen.png', image_filtre_moyen.astype(np.uint8))
     peack_signal_noise_ration(image_data, image_filtre_moyen)
-    
+
 elif wanted == "fg":
-    sigma = print("Enter the value of sigma: ")
-    sigma = float(input())
-    filtered_image_gaussian = filtre_gaussian(image, sigma, kernel_size=5)
-    cv2.imshow('Image Originale', image_data)
-    cv2.imshow('Image avec Filtre gaussian', filtered_image_gaussian)
+    sigma = float(input("Enter the value of sigma: "))
+    filtered_image_gaussian = filtre_gaussian(image_data, sigma, kernel_size=5)
+    cv2.imwrite('image_filtre_gaussian.png', filtered_image_gaussian)
     peack_signal_noise_ration(image_data, filtered_image_gaussian)
-    
+
+elif wanted == "fme":
+    window_size = int(input("Enter the window size for Median filter: "))
+    image_filtre_median = filtre_median(image_data, window_size)
+    cv2.imwrite('image_filtre_median.png', image_filtre_median)
+    peack_signal_noise_ration(image_data, image_filtre_median)
+
+elif wanted == "fmm":
+    window_size = int(input("Enter the window size for Min-Max filter: "))
+    image_filtre_min_max = filtre_min_max(image_data, window_size)
+    cv2.imwrite('image_filtre_min_max.png', image_filtre_min_max)
+    peack_signal_noise_ration(image_data, image_filtre_min_max)
+
 else:
     print("Invalid input")
-
-# # Generate Gaussian noise and add to the image
-# bruit = bruit_gaussien(mu, sigma, largeur, hauteur)
-# image_gaussienne = np.clip(image_data + bruit, 0, 255).astype(np.uint8)
-
-# # Add salt-and-pepper noise
-# prob = 0.05  # Probability of noise
-# image_poivre_sel = bruit_poivre_et_sel(image_data, prob)
-
-# Apply mean filter
-# image_filtre_moyen = filtre_moyen(image_data , 3)
-# # Apply Gaussian filter to the image
-# filtered_image_gaussian = filtre_gaussian(image, kernel_size=5, sigma=10)
-
-# Display images
-# cv2.imshow('Image Originale', image_data)
-# cv2.imshow('Image avec Bruit Gaussien', image_gaussienne)
-# cv2.imshow('Image avec Bruit Poivre et Sel', image_poivre_sel)
-# cv2.imshow('Image avec Filtre Moyen', image_filtre_moyen.astype(np.uint8))
-# cv2.imshow('Image avec Filtre gaussian', filtered_image_gaussian)
-
-
-
-# Wait for a key to close all windows
-cv2.waitKey(0)
-cv2.destroyAllWindows()

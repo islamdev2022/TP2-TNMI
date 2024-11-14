@@ -1,4 +1,5 @@
 import customtkinter as ctk
+
 import os
 from tkinter import filedialog
 import cv2
@@ -108,38 +109,58 @@ app = ctk.CTk()
 app.title("Image Noise and Filter Application")
 app.geometry("600x600")
 
-# Load Image
+# Function to load the image
 def load_image():
     global image_data, image_name
-    file_path = filedialog.askopenfilename()
+    file_path = filedialog.askopenfilename(filetypes=[("BMP files", "*.bmp")])  # Only allow BMP files
     if file_path:
         image_name = os.path.basename(file_path)  # Extract the image name from the file path
+
+        # Check if the file has a .bmp extension
+        if not file_path.lower().endswith('.bmp'):
+            print("Selected file is not a BMP image.")
+            return
+
+        # Open and process the BMP image
         image = Image.open(file_path).convert("L")
         image_data = np.array(image)
-        display_image(image_data)
-        print(f"Original Image Name: {image_name}")  # Debugging print
+        display_image_in_new_window(image_data)
+        print(f"Original Image Name: {image_name}")
     else:
         print("No file selected")
-
-# Display Image
-def display_image(image_array):
+        
+# Display Image in a new CTkToplevel window
+def display_image_in_new_window(image_array):
     if not isinstance(image_array, np.ndarray):
         print("Error: The image data is not in the correct format (not a NumPy array).")
         return
 
-    # Ensure the array is of type uint8
-    image_array = image_array.astype(np.uint8)
-    
     try:
         # Convert the NumPy array to a PIL image
         image = Image.fromarray(image_array)
 
-        # Convert the PIL image to CTkImage
-        image_tk = ctk.CTkImage(light_image=image, dark_image=image)  # Using same image for both light and dark modes
+        # Create a new Toplevel window
+        new_window = ctk.CTkToplevel(app)
+        new_window.title("Displayed Image")
+        new_window.geometry("300x300")  # Adjust size as needed
 
-        # Update the display_label with the new CTkImage
-        display_label.configure(image=image_tk)
-        display_label.image = image_tk  # Keep a reference to avoid garbage collection
+        # Convert the PIL image to CTkImage and store it in a global variable
+        global image_tk  # Ensure image_tk is global to retain the reference
+        image_tk = ctk.CTkImage(light_image=image, dark_image=image, size=(300, 300))  
+        print("Image converted to CTkImage successfully")
+        
+        
+        
+        
+        # Create a label in the new window to display the image
+        image_label = ctk.CTkLabel(new_window, image=image_tk)
+        image_label.pack(pady=20)
+
+        # Update the window to ensure image loads
+        new_window.update()
+        
+        print("Image displayed successfully in new window")
+
     except Exception as e:
         print("An error occurred while displaying the image:", e)
 
@@ -176,7 +197,7 @@ def apply():
         
     psnr_value = peack_signal_noise_ration(image_data, processed_image)
     psnr_label.configure(text=f"PSNR: {psnr_value:.2f}")
-    display_image(processed_image)
+    display_image_in_new_window(processed_image)
 
 
 # Callback function to update secondary options
@@ -197,9 +218,7 @@ def update_secondary_options(*args):
 app = ctk.CTk()
 app.title("Image Noise and Filtering")
 app.geometry("600x600")
-# Global variables
-image_data = None
-image_name = ""
+
 
 primary_label = ctk.CTkLabel(app, text="Select Noise or Filter:")
 primary_label.pack(pady=10)
@@ -249,7 +268,7 @@ psnr_label = ctk.CTkLabel(app, text="PSNR: ")
 psnr_label.pack()
 
 display_label = ctk.CTkLabel(app)
-display_label.pack(pady=20)
+display_label.pack()
 
 # Load image button
 load_button = ctk.CTkButton(app, text="Load Image", command=load_image)

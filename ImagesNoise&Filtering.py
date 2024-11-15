@@ -35,6 +35,8 @@ def bruit_poivre_et_sel(image, prob):
 # Filtre médian
 def filtre_median(img, window_size):
     m, n = img.shape
+    if window_size % 2 == 0:
+        messagebox.showerror("Filter Size Error", "Filter size must be odd.")
     offset = window_size // 2
     img_new = np.zeros([m, n])
 
@@ -51,14 +53,31 @@ def filtre_median(img, window_size):
     return np.clip(img_new, 0, 255).astype(np.uint8)
 
 # Filtre moyen
-def filtre_moyen(img, t):
-    m, n = img.shape
-    mask = np.ones([t, t], dtype=int) / t ** 2
-    img_new = np.zeros([m, n])
-    for i in range(1, m - 1):
-        for j in range(1, n - 1):
-            temp = np.sum(img[i - 1:i + 2, j - 1:j + 2] * mask)
-            img_new[i, j] = temp
+def filtre_moyen(image, taille):
+    # Get image dimensions
+    m, n = image.shape
+
+    # Ensure the filter size is odd
+    if taille % 2 == 0:
+        messagebox.showerror("Filter Size Error", "Filter size must be odd.")
+
+    # Create the mean filter mask
+    mask = np.ones([taille, taille], dtype=float) / (taille ** 2)
+
+    # Calculate offset for window based on t
+    offset = taille // 2
+
+    # Initialize the new image
+    img_new = np.zeros_like(image)
+
+    # Apply the mean filter
+    for i in range(offset, m - offset):
+        for j in range(offset, n - offset):
+            # Extract the region of interest
+            region = image[i - offset:i + offset + 1, j - offset:j + offset + 1]
+            # Apply the mask
+            img_new[i, j] = np.sum(region * mask)
+
     return img_new
 
 # Filtre gaussien
@@ -103,6 +122,8 @@ def filtre_gaussian(image, kernel_size=5, sigma=1.0):
 # Fonction de filtre Min-Max
 def filtre_min_max(img, window_size):
     m, n = img.shape
+    if window_size % 2 == 0:
+        messagebox.showerror("Filter Size Error", "Filter size must be odd.")
     offset = window_size // 2
     img_new = np.zeros([m, n])
 
@@ -236,13 +257,14 @@ def apply_filters():
         messagebox.showerror("Filter Error", "No filters selected.")
         return
     psnr_values = {}
-    if not window_size_entry.get():
-        messagebox.showerror("Window Size Error", "Window size not specified.")
-        return
     for filter_type in filters_selected:
+        entry_value = filter_entries[filter_type].get()
+        if not entry_value:
+            messagebox.showerror("Input Error", f"Value for {filter_type} not specified.")
+            return
         if filter_type == "Mean Filter":
-            filtered_image = filtre_moyen(noisy_image, int(window_size_entry.get()))
-            new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
+            filtered_image = filtre_moyen(noisy_image, int(entry_value))
+            new_image_name=f"{base_name}_{filter_type} ws={int(entry_value)}{ext}"
             cv2.imwrite(new_image_name, filtered_image)
             display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Mean Filter"] = peack_signal_noise_ration(image_data, filtered_image)
@@ -254,14 +276,14 @@ def apply_filters():
             display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Gaussian Filter"] = peack_signal_noise_ration(image_data, filtered_image)
         elif filter_type == "Median Filter":
-            filtered_image = filtre_median(noisy_image, int(window_size_entry.get()))
-            new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
+            filtered_image = filtre_median(noisy_image, int(entry_value))
+            new_image_name=f"{base_name}_{filter_type} ws={int(entry_value)}{ext}"
             cv2.imwrite(new_image_name, filtered_image)
             display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Median Filter"] = peack_signal_noise_ration(image_data, filtered_image)
         elif filter_type == "Min-Max Filter":
-            filtered_image = filtre_min_max(noisy_image, int(window_size_entry.get()))
-            new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
+            filtered_image = filtre_min_max(noisy_image, int(entry_value))
+            new_image_name=f"{base_name}_{filter_type} ws={int(entry_value)}{ext}"
             cv2.imwrite(new_image_name, filtered_image)
             display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Min-Max Filter"] = peack_signal_noise_ration(image_data, filtered_image)
@@ -289,14 +311,21 @@ def on_noise_type_change(event):
         sigma_entry.configure(state="disabled")
         probability_entry.configure(state="normal")
 
-# Initialize application
-app = ctk.CTk()
-app.geometry("800x600")
-app.title("Image Noise and Filter Application")
+def toggle_entry(checkbox_var, entry):
+    """Enable or disable an entry based on checkbox state."""
+    if checkbox_var.get():
+        entry.configure(state="normal")
+    else:
+        entry.configure(state="disabled")
 
 image_data = None
 noisy_image = None
 psnr_values = {}
+
+# Initialize application
+app = ctk.CTk()
+app.geometry("800x600")
+app.title("Image Noise and Filter Application")
 
 # UI Elements
 load_image_button = ctk.CTkButton(app, text="Load Image", command=load_image)
@@ -324,24 +353,30 @@ probability_entry.grid(row=2, column=1, padx=10, pady=5)
 apply_noise_button = ctk.CTkButton(app, text="Apply Noise", command=apply_noise)
 apply_noise_button.pack(pady=10)
 
-# Filter selection
+# Filter selection with separate entries for each filter
 filter_frame = ctk.CTkFrame(app)
 filter_frame.pack(pady=10, padx=20, fill="x")
+
 filter_vars = {
     "Mean Filter": ctk.IntVar(),
     "Gaussian Filter": ctk.IntVar(),
     "Median Filter": ctk.IntVar(),
     "Min-Max Filter": ctk.IntVar()
 }
+
+# Entries for each filter's window size or sigma
+filter_entries = {}
+
 ctk.CTkLabel(filter_frame, text="Select Filters:").grid(row=0, column=0, padx=10, pady=5)
 for idx, (filter_name, var) in enumerate(filter_vars.items()):
-    ctk.CTkCheckBox(filter_frame, text=filter_name, variable=var).grid(row=0, column=idx + 1, padx=10, pady=5)
-
-# Window size entry
-window_size_label = ctk.CTkLabel(filter_frame, text="Window Size:")
-window_size_label.grid(row=1, column=0, padx=10, pady=5)
-window_size_entry = ctk.CTkEntry(filter_frame)
-window_size_entry.grid(row=1, column=1, padx=10, pady=5)
+    checkbox = ctk.CTkCheckBox(filter_frame, text=filter_name, variable=var, 
+                               command=lambda var=var, filter_name=filter_name: toggle_entry(var, filter_entries[filter_name]))
+    checkbox.grid(row=0, column=idx + 1, padx=10, pady=5)
+    
+    # Create an entry field for the filter (initially disabled)
+    entry = ctk.CTkEntry(filter_frame, state="disabled", placeholder_text=f"Enter value for {filter_name}")
+    entry.grid(row=1, column=idx + 1, padx=10, pady=5)
+    filter_entries[filter_name] = entry
 
 apply_filters_button = ctk.CTkButton(app, text="Apply Filters", command=apply_filters)
 apply_filters_button.pack(pady=10)

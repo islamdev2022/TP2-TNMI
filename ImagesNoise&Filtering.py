@@ -1,11 +1,11 @@
 import customtkinter as ctk
 import os
-from tkinter import filedialog
+from tkinter import filedialog,messagebox
 import cv2
 import numpy as np
 import random
 import math
-from PIL import Image, ImageTk
+from PIL import Image
 
 # Fonction pour générer du bruit gaussien
 def bruit_gaussien(mu, sigma, largeur, hauteur):
@@ -29,7 +29,6 @@ def bruit_poivre_et_sel(image, prob):
                 noisy_image[i][j] = 0  # Poivre
             elif rand > 1 - prob:
                 noisy_image[i][j] = 255  # Sel
-    cv2.imwrite("bruit_poivre_et_sel.png", noisy_image)
     return noisy_image
 
 # Filtre médian
@@ -62,9 +61,43 @@ def filtre_moyen(img, t):
     return img_new
 
 # Filtre gaussien
-def filtre_gaussian(image, sigma, kernel_size=5):
-    noisy_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) if len(image.shape) == 2 else image
-    return cv2.GaussianBlur(noisy_image, (kernel_size, kernel_size), sigma)
+def filtre_gaussian(image, kernel_size=5, sigma=1.0):
+
+    # Ensure kernel size is odd
+    if kernel_size % 2 == 0:
+        raise ValueError("Kernel size must be odd.")
+    
+    # Create the Gaussian kernel
+    k = kernel_size // 2
+    x, y = np.meshgrid(np.arange(-k, k + 1), np.arange(-k, k + 1))
+    gaussian_kernel = (1 / (2 * np.pi * sigma**2)) * np.exp(-(x**2 + y**2) / (2 * sigma**2))
+    gaussian_kernel /= gaussian_kernel.sum()  # Normalize the kernel
+    
+    # Check if image is grayscale or RGB
+    if len(image.shape) == 2:  # Grayscale image
+        filtered_image = np.zeros_like(image, dtype=np.float64)
+        padded_image = np.pad(image, k, mode='constant')
+    elif len(image.shape) == 3:  # RGB image
+        filtered_image = np.zeros_like(image, dtype=np.float64)
+        padded_image = np.pad(image, ((k, k), (k, k), (0, 0)), mode='constant')
+    else:
+        raise ValueError("Unsupported image shape.")
+    
+    # Convolution
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            if len(image.shape) == 2:  # Grayscale
+                region = padded_image[i:i + kernel_size, j:j + kernel_size]
+                filtered_image[i, j] = np.sum(region * gaussian_kernel)
+            else:  # RGB
+                for c in range(image.shape[2]):
+                    region = padded_image[i:i + kernel_size, j:j + kernel_size, c]
+                    filtered_image[i, j, c] = np.sum(region * gaussian_kernel)
+    
+    # Clip values to valid range
+    filtered_image = np.clip(filtered_image, 0, 255).astype(np.uint8)
+    
+    return filtered_image
 
 # Fonction de filtre Min-Max
 def filtre_min_max(img, window_size):
@@ -120,10 +153,10 @@ def load_image():
         # Open and process the BMP image
         image = Image.open(file_path).convert("L")
         image_data = np.array(image)
-        display_image_in_new_window(image_data)
+        display_image_in_new_window(image_data,image_name)
         print(f"Original Image Name: {image_name}")
     else:
-        print("No file selected")
+        messagebox.showerror("No Image","No image selected.")
         
 # Display Image in a new CTkToplevel window
 def display_image_in_new_window(image_array,name):
@@ -157,144 +190,151 @@ def display_image_in_new_window(image_array,name):
     except Exception as e:
         print("An error occurred while displaying the image:", e)
 
-# Apply Filter or Noise
-def apply():
-    global image_data, image_name
-    sigma = float(sigma_entry.get()) if sigma_entry.get() else 0
-    probality = float(probabilite_entry.get()) if probabilite_entry.get() else 0.05
-    window_size = int(window_size_entry.get()) if window_size_entry.get() else 3
-    noise_type = noise_option.get()
+# Function to handle the noise application
+def apply_noise():
+    global noisy_image ,image_name
+    if image_data is None:
+        messagebox.showerror("Image Error", "No image loaded.")
+        return
+    else:
+        base_name, ext = os.path.splitext(image_name)
+        noise_type = noise_type_combobox.get()
+        if noise_type == "Gaussian Noise":
+            sigma = float(sigma_entry.get()) if sigma_entry.get() else 0
+            noise = bruit_gaussien(0, sigma, image_data.shape[1], image_data.shape[0])
+            noisy_image = np.clip(image_data + noise, 0, 255).astype(np.uint8)
+            new_image_name=f"{base_name}_{noise_type} s={sigma}{ext}"
+            cv2.imwrite(new_image_name, noisy_image)
+            display_image_in_new_window(noisy_image, new_image_name)
+        elif noise_type == "Salt & Pepper Noise":
+            prob = float(probability_entry.get()) if probability_entry.get() else 0.05
+            noisy_image = bruit_poivre_et_sel(image_data, prob)
+            new_image_name=f"{base_name}_{noise_type} p={prob}{ext}"
+            cv2.imwrite(new_image_name, noisy_image)
+            display_image_in_new_window(noisy_image, new_image_name)
+        else:
+            print("Invalid noise type selected.")
+
+# Function to handle filter application
+def apply_filters():
+    global psnr_values ,image_name
+    if noisy_image is None:
+        messagebox.showerror("Image Error", "No image loaded or noise applied.")
+        return
     base_name, ext = os.path.splitext(image_name)
-    
+    filters_selected = [filter for filter, var in filter_vars.items() if var.get()]
+    if not filters_selected:
+        messagebox.showerror("Filter Error", "No filters selected.")
+        return
+    psnr_values = {}
+    for filter_type in filters_selected:
+        if filter_type == "Mean Filter":
+            filtered_image = filtre_moyen(noisy_image, int(window_size_entry.get()))
+            new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
+            cv2.imwrite(new_image_name, filtered_image)
+            display_image_in_new_window(filtered_image, new_image_name)
+            psnr_values["Mean Filter"] = peack_signal_noise_ration(image_data, filtered_image)
+        elif filter_type == "Gaussian Filter":
+            sigma = float(sigma_entry.get())
+            filtered_image = filtre_gaussian(noisy_image,kernel_size=5, sigma=sigma) 
+            new_image_name=f"{base_name}_{filter_type} s={sigma}{ext}"
+            cv2.imwrite(new_image_name, filtered_image)
+            display_image_in_new_window(filtered_image, new_image_name)
+            psnr_values["Gaussian Filter"] = peack_signal_noise_ration(image_data, filtered_image)
+        elif filter_type == "Median Filter":
+            filtered_image = filtre_median(noisy_image, int(window_size_entry.get()))
+            new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
+            cv2.imwrite(new_image_name, filtered_image)
+            display_image_in_new_window(filtered_image, new_image_name)
+            psnr_values["Median Filter"] = peack_signal_noise_ration(image_data, filtered_image)
+        elif filter_type == "Min-Max Filter":
+            filtered_image = filtre_min_max(noisy_image, int(window_size_entry.get()))
+            new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
+            display_image_in_new_window(filtered_image, new_image_name)
+            psnr_values["Min-Max Filter"] = peack_signal_noise_ration(image_data, filtered_image)
+        else:
+            print(f"Invalid filter: {filter_type}")
+    display_psnr_results()
+
+# Function to display PSNR results
+def display_psnr_results():
+    if not psnr_values:
+        return
+    best_filter = max(psnr_values, key=psnr_values.get)
+    best_psnr = psnr_values[best_filter]
+    print(f"Best Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
+    messagebox.showinfo("PSNR Results", f"Best Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
+    psnr_label.configure(text=f"Best Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
+
+# Noise type combobox event
+def on_noise_type_change(event):
+    noise_type = noise_type_combobox.get()
     if noise_type == "Gaussian Noise":
-        bruit = bruit_gaussien(0, sigma, image_data.shape[1], image_data.shape[0])
-        processed_image = np.clip(image_data + bruit, 0, 255).astype(np.uint8)
-        new_image_name = f"{base_name}_{noise_type}_{sigma}{ext}"
-        cv2.imwrite(new_image_name, processed_image)
-    elif noise_type == "Salt and Pepper Noise":
-        processed_image = bruit_poivre_et_sel(image_data, 0.05)
-        new_image_name = f"{base_name}_{noise_type}_{probality}{ext}"
-        cv2.imwrite(new_image_name, processed_image)
-    elif noise_type == "Mean Filter":
-        processed_image = filtre_moyen(image_data, window_size).astype(np.uint8)
-        new_image_name = f"{base_name}_{noise_type}_{window_size}{ext}"
-        cv2.imwrite(new_image_name, processed_image)
-    elif noise_type == "Gaussian Filter":
-        processed_image = filtre_gaussian(image_data, sigma)
-        new_image_name = f"{base_name}_{noise_type}_{sigma}{ext}"
-        cv2.imwrite(new_image_name, processed_image)
-    elif noise_type == "Median Filter":
-        processed_image = filtre_median(image_data, window_size)
-        new_image_name = f"{base_name}_{noise_type}_{window_size}{ext}"
-        cv2.imwrite(new_image_name, processed_image)
-    else:
-        processed_image = filtre_min_max(image_data, window_size)
-        new_image_name = f"{base_name}_{noise_type}_{window_size}{ext}"
-        cv2.imwrite(new_image_name, processed_image)
-        
-    psnr_value = peack_signal_noise_ration(image_data, processed_image)
-    psnr_label.configure(text=f"PSNR: {psnr_value:.2f}")
-    display_image_in_new_window(processed_image,new_image_name)
-
-
-# Callback function to update secondary options
-def update_secondary_options(*args):
-    choice = primary_option_var.get()
-    print(f"Primary option selected: {choice}")
-    
-    # Update the secondary options based on the primary choice
-    if choice == "Noise":
-        secondary_option.configure(values=["Gaussian Noise", "Salt and Pepper Noise"])
-    elif choice == "Filter":
-        secondary_option.configure(values=["Mean Filter", "Gaussian Filter", "Median Filter", "Min-Max Filter"])
-    
-    # Clear the secondary combobox selection
-    secondary_option.set("")  # Debugging line
-    
-    # Function to enable/disable entries based on selection
-def update_entries(*args):
-    choice = noise_option.get()
-    if choice == "Gaussian Noise" or choice == "Gaussian Filter":
         sigma_entry.configure(state="normal")
-    else:
+        probability_entry.configure(state="disabled")
+    elif noise_type == "Salt & Pepper Noise":
         sigma_entry.configure(state="disabled")
-    if choice == "Salt and Pepper Noise":
-        probabilite_entry.configure(state="normal")
-    else:
-        probabilite_entry.configure(state="disabled")
-    if choice == "Mean Filter" or choice == "Median Filter" or choice == "Min-Max Filter":
-        window_size_entry.configure(state="normal")
-    else:
-        window_size_entry.configure(state="disabled")
+        probability_entry.configure(state="normal")
 
-# Interface Widgets
+# Initialize application
 app = ctk.CTk()
-app.title("Image Noise and Filtering")
-app.geometry("600x600")
+app.geometry("800x600")
+app.title("Image Noise and Filter Application")
 
+image_data = None
+noisy_image = None
+psnr_values = {}
 
-primary_label = ctk.CTkLabel(app, text="Select Noise or Filter:")
-primary_label.pack(pady=10)
+# UI Elements
+load_image_button = ctk.CTkButton(app, text="Load Image", command=load_image)
+load_image_button.pack(pady=10)
 
-# Create a StringVar to monitor combobox value
-primary_option_var = ctk.StringVar(app)
+# Noise selection
+noise_frame = ctk.CTkFrame(app)
+noise_frame.pack(pady=10, padx=20, fill="x")
+ctk.CTkLabel(noise_frame, text="Select Noise Type:").grid(row=0, column=0, padx=10, pady=5)
+noise_type_combobox = ctk.CTkComboBox(noise_frame, values=["Gaussian Noise", "Salt & Pepper Noise"], state="readonly")
+noise_type_combobox.grid(row=0, column=1, padx=10, pady=5)
+noise_type_combobox.bind("<<ComboboxSelected>>", on_noise_type_change)
 
-# Create the primary combobox and associate it with the StringVar
-primary_option = ctk.CTkComboBox(app, values=["Noise", "Filter"], variable=primary_option_var)
-primary_option.pack()
+# Noise parameters
+sigma_label = ctk.CTkLabel(noise_frame, text="Sigma:")
+sigma_label.grid(row=1, column=0, padx=10, pady=5)
+sigma_entry = ctk.CTkEntry(noise_frame)
+sigma_entry.grid(row=1, column=1, padx=10, pady=5)
 
-# Trace changes to the primary_option variable
-primary_option_var.trace_add("write", update_secondary_options)
+probability_label = ctk.CTkLabel(noise_frame, text="Probability:")
+probability_label.grid(row=2, column=0, padx=10, pady=5)
+probability_entry = ctk.CTkEntry(noise_frame)
+probability_entry.grid(row=2, column=1, padx=10, pady=5)
 
-secondary_label = ctk.CTkLabel(app, text="Select Type:")
-secondary_label.pack(pady=10)
+apply_noise_button = ctk.CTkButton(app, text="Apply Noise", command=apply_noise)
+apply_noise_button.pack(pady=10)
 
-# Create the secondary combobox
-secondary_option = ctk.CTkComboBox(app, values=[])
-secondary_option.pack()
+# Filter selection
+filter_frame = ctk.CTkFrame(app)
+filter_frame.pack(pady=10, padx=20, fill="x")
+filter_vars = {
+    "Mean Filter": ctk.IntVar(),
+    "Gaussian Filter": ctk.IntVar(),
+    "Median Filter": ctk.IntVar(),
+    "Min-Max Filter": ctk.IntVar()
+}
+ctk.CTkLabel(filter_frame, text="Select Filters:").grid(row=0, column=0, padx=10, pady=5)
+for idx, (filter_name, var) in enumerate(filter_vars.items()):
+    ctk.CTkCheckBox(filter_frame, text=filter_name, variable=var).grid(row=0, column=idx + 1, padx=10, pady=5)
 
-# Initialize noise_option
-noise_option = secondary_option
+# Window size entry
+window_size_label = ctk.CTkLabel(filter_frame, text="Window Size:")
+window_size_label.grid(row=1, column=0, padx=10, pady=5)
+window_size_entry = ctk.CTkEntry(filter_frame)
+window_size_entry.grid(row=1, column=1, padx=10, pady=5)
 
-sigma_label = ctk.CTkLabel(app, text="Sigma:")
-sigma_label.pack()
+apply_filters_button = ctk.CTkButton(app, text="Apply Filters", command=apply_filters)
+apply_filters_button.pack(pady=10)
 
-# Disable sigma_entry initially
-sigma_entry = ctk.CTkEntry(app)
-sigma_entry.pack(pady=5)
-sigma_entry.configure(state="disabled")
-
-
-# Set command to update entries when noise_option changes
-noise_option.configure(command=update_entries)
-
-
-probabilite_label = ctk.CTkLabel(app, text="Probabilite:")
-probabilite_label.pack()
-
-# Disable probabilite_entry initially
-probabilite_entry = ctk.CTkEntry(app)
-probabilite_entry.pack(pady=5)
-probabilite_entry.configure(state="disabled")
-
-window_size_label = ctk.CTkLabel(app, text="Window Size:")
-window_size_label.pack()
-
-# Disable window_size_entry initially
-window_size_entry = ctk.CTkEntry(app)
-window_size_entry.pack(pady=5)
-window_size_entry.configure(state="disabled")
-
-# Apply button
-apply_button = ctk.CTkButton(app, text="Apply", command=apply)
-apply_button.pack(pady=20)
-
-psnr_label = ctk.CTkLabel(app, text="PSNR: ")
-psnr_label.pack()
-
-
-# Load image button
-load_button = ctk.CTkButton(app, text="Load Image", command=load_image)
-load_button.pack(pady=20)
+# PSNR result
+psnr_label = ctk.CTkLabel(app, text="PSNR Results: None", font=("Arial", 14))
+psnr_label.pack(pady=20)
 
 app.mainloop()

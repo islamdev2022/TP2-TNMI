@@ -6,6 +6,7 @@ import numpy as np
 import random
 import math
 from PIL import Image
+import matplotlib.pyplot as plt
 
 # Fonction pour générer du bruit gaussien
 def bruit_gaussien(mu, sigma, largeur, hauteur):
@@ -153,11 +154,19 @@ def load_image():
         # Open and process the BMP image
         image = Image.open(file_path).convert("L")
         image_data = np.array(image)
-        display_image_in_new_window(image_data,image_name)
+        display_image_with_matplotlib(image_data, image_name)
         print(f"Original Image Name: {image_name}")
     else:
         messagebox.showerror("No Image","No image selected.")
         
+        
+# Display Image using Matplotlib
+def display_image_with_matplotlib(image_array, name):
+    plt.figure(figsize=(8, 8))
+    plt.imshow(image_array, cmap='gray')
+    plt.title(name)
+    plt.show()
+    
 # Display Image in a new CTkToplevel window
 def display_image_in_new_window(image_array,name):
     if not isinstance(image_array, np.ndarray):
@@ -205,13 +214,13 @@ def apply_noise():
             noisy_image = np.clip(image_data + noise, 0, 255).astype(np.uint8)
             new_image_name=f"{base_name}_{noise_type} s={sigma}{ext}"
             cv2.imwrite(new_image_name, noisy_image)
-            display_image_in_new_window(noisy_image, new_image_name)
+            display_image_with_matplotlib(noisy_image, new_image_name)
         elif noise_type == "Salt & Pepper Noise":
             prob = float(probability_entry.get()) if probability_entry.get() else 0.05
             noisy_image = bruit_poivre_et_sel(image_data, prob)
             new_image_name=f"{base_name}_{noise_type} p={prob}{ext}"
             cv2.imwrite(new_image_name, noisy_image)
-            display_image_in_new_window(noisy_image, new_image_name)
+            display_image_with_matplotlib(noisy_image, new_image_name)
         else:
             print("Invalid noise type selected.")
 
@@ -227,30 +236,34 @@ def apply_filters():
         messagebox.showerror("Filter Error", "No filters selected.")
         return
     psnr_values = {}
+    if not window_size_entry.get():
+        messagebox.showerror("Window Size Error", "Window size not specified.")
+        return
     for filter_type in filters_selected:
         if filter_type == "Mean Filter":
             filtered_image = filtre_moyen(noisy_image, int(window_size_entry.get()))
             new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
             cv2.imwrite(new_image_name, filtered_image)
-            display_image_in_new_window(filtered_image, new_image_name)
+            display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Mean Filter"] = peack_signal_noise_ration(image_data, filtered_image)
         elif filter_type == "Gaussian Filter":
             sigma = float(sigma_entry.get())
             filtered_image = filtre_gaussian(noisy_image,kernel_size=5, sigma=sigma) 
             new_image_name=f"{base_name}_{filter_type} s={sigma}{ext}"
             cv2.imwrite(new_image_name, filtered_image)
-            display_image_in_new_window(filtered_image, new_image_name)
+            display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Gaussian Filter"] = peack_signal_noise_ration(image_data, filtered_image)
         elif filter_type == "Median Filter":
             filtered_image = filtre_median(noisy_image, int(window_size_entry.get()))
             new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
             cv2.imwrite(new_image_name, filtered_image)
-            display_image_in_new_window(filtered_image, new_image_name)
+            display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Median Filter"] = peack_signal_noise_ration(image_data, filtered_image)
         elif filter_type == "Min-Max Filter":
             filtered_image = filtre_min_max(noisy_image, int(window_size_entry.get()))
             new_image_name=f"{base_name}_{filter_type} ws={window_size_entry.get()}{ext}"
-            display_image_in_new_window(filtered_image, new_image_name)
+            cv2.imwrite(new_image_name, filtered_image)
+            display_image_with_matplotlib(filtered_image, new_image_name)
             psnr_values["Min-Max Filter"] = peack_signal_noise_ration(image_data, filtered_image)
         else:
             print(f"Invalid filter: {filter_type}")

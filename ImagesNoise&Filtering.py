@@ -1,5 +1,4 @@
 import customtkinter as ctk
-
 import os
 from tkinter import filedialog
 import cv2
@@ -105,9 +104,6 @@ def peack_signal_noise_ration(img_origin, img_bruit):
 
 # Interface Tkinter
 ctk.set_appearance_mode("Dark")
-app = ctk.CTk()
-app.title("Image Noise and Filter Application")
-app.geometry("600x600")
 
 # Function to load the image
 def load_image():
@@ -130,7 +126,7 @@ def load_image():
         print("No file selected")
         
 # Display Image in a new CTkToplevel window
-def display_image_in_new_window(image_array):
+def display_image_in_new_window(image_array,name):
     if not isinstance(image_array, np.ndarray):
         print("Error: The image data is not in the correct format (not a NumPy array).")
         return
@@ -141,19 +137,16 @@ def display_image_in_new_window(image_array):
 
         # Create a new Toplevel window
         new_window = ctk.CTkToplevel(app)
-        new_window.title("Displayed Image")
-        new_window.geometry("300x300")  # Adjust size as needed
+        new_window.title(name)
+        new_window.geometry("600x600")  # Adjust size as needed
+        
 
         # Convert the PIL image to CTkImage and store it in a global variable
         global image_tk  # Ensure image_tk is global to retain the reference
-        image_tk = ctk.CTkImage(light_image=image, dark_image=image, size=(300, 300))  
+        image_tk = ctk.CTkImage(light_image=image, dark_image=image, size=(600, 600))  
         print("Image converted to CTkImage successfully")
-        
-        
-        
-        
         # Create a label in the new window to display the image
-        image_label = ctk.CTkLabel(new_window, image=image_tk)
+        image_label = ctk.CTkLabel(new_window, image=image_tk ,text="")
         image_label.pack(pady=20)
 
         # Update the window to ensure image loads
@@ -192,12 +185,16 @@ def apply():
         cv2.imwrite(new_image_name, processed_image)
     elif noise_type == "Median Filter":
         processed_image = filtre_median(image_data, window_size)
+        new_image_name = f"{base_name}_{noise_type}_{window_size}{ext}"
+        cv2.imwrite(new_image_name, processed_image)
     else:
         processed_image = filtre_min_max(image_data, window_size)
+        new_image_name = f"{base_name}_{noise_type}_{window_size}{ext}"
+        cv2.imwrite(new_image_name, processed_image)
         
     psnr_value = peack_signal_noise_ration(image_data, processed_image)
     psnr_label.configure(text=f"PSNR: {psnr_value:.2f}")
-    display_image_in_new_window(processed_image)
+    display_image_in_new_window(processed_image,new_image_name)
 
 
 # Callback function to update secondary options
@@ -213,6 +210,22 @@ def update_secondary_options(*args):
     
     # Clear the secondary combobox selection
     secondary_option.set("")  # Debugging line
+    
+    # Function to enable/disable entries based on selection
+def update_entries(*args):
+    choice = noise_option.get()
+    if choice == "Gaussian Noise" or choice == "Gaussian Filter":
+        sigma_entry.configure(state="normal")
+    else:
+        sigma_entry.configure(state="disabled")
+    if choice == "Salt and Pepper Noise":
+        probabilite_entry.configure(state="normal")
+    else:
+        probabilite_entry.configure(state="disabled")
+    if choice == "Mean Filter" or choice == "Median Filter" or choice == "Min-Max Filter":
+        window_size_entry.configure(state="normal")
+    else:
+        window_size_entry.configure(state="disabled")
 
 # Interface Widgets
 app = ctk.CTk()
@@ -246,29 +259,39 @@ noise_option = secondary_option
 sigma_label = ctk.CTkLabel(app, text="Sigma:")
 sigma_label.pack()
 
+# Disable sigma_entry initially
 sigma_entry = ctk.CTkEntry(app)
 sigma_entry.pack(pady=5)
+sigma_entry.configure(state="disabled")
 
-probabilite_label = ctk.CTkLabel(app, text="Probability:")
+
+# Set command to update entries when noise_option changes
+noise_option.configure(command=update_entries)
+
+
+probabilite_label = ctk.CTkLabel(app, text="Probabilite:")
 probabilite_label.pack()
 
+# Disable probabilite_entry initially
 probabilite_entry = ctk.CTkEntry(app)
 probabilite_entry.pack(pady=5)
+probabilite_entry.configure(state="disabled")
 
 window_size_label = ctk.CTkLabel(app, text="Window Size:")
 window_size_label.pack()
 
+# Disable window_size_entry initially
 window_size_entry = ctk.CTkEntry(app)
 window_size_entry.pack(pady=5)
+window_size_entry.configure(state="disabled")
 
-apply_button = ctk.CTkButton(app, text="Apply")
+# Apply button
+apply_button = ctk.CTkButton(app, text="Apply", command=apply)
 apply_button.pack(pady=20)
 
 psnr_label = ctk.CTkLabel(app, text="PSNR: ")
 psnr_label.pack()
 
-display_label = ctk.CTkLabel(app)
-display_label.pack()
 
 # Load image button
 load_button = ctk.CTkButton(app, text="Load Image", command=load_image)

@@ -1,6 +1,6 @@
 import customtkinter as ctk
 import os
-from tkinter import filedialog,messagebox
+from tkinter import filedialog, messagebox
 import cv2
 import numpy as np
 import random
@@ -17,7 +17,7 @@ def bruit_gaussien(mu, sigma, largeur, hauteur):
             u2 = np.random.random()
             z0 = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
             bruit[i][j] = mu + sigma * z0
-    
+            
     return bruit
 
 # Fonction pour générer du bruit de poivre et sel
@@ -82,17 +82,15 @@ def filtre_moyen(image, taille):
 
 # Filtre gaussien
 def filtre_gaussian(image, kernel_size=5, sigma=1.0):
-
     # Ensure kernel size is odd
     if kernel_size % 2 == 0:
         raise ValueError("Kernel size must be odd.")
-    
     # Create the Gaussian kernel
     k = kernel_size // 2
     x, y = np.meshgrid(np.arange(-k, k + 1), np.arange(-k, k + 1))
-    gaussian_kernel = (1 / (2 * np.pi * sigma**2)) * np.exp(-(x**2 + y**2) / (2 * sigma**2))
+    gaussian_kernel = (1 / (2 * np.pi * sigma ** 2)) * np.exp(-(x ** 2 + y ** 2) / (2 * sigma ** 2))
     gaussian_kernel /= gaussian_kernel.sum()  # Normalize the kernel
-    
+
     # Check if image is grayscale or RGB
     if len(image.shape) == 2:  # Grayscale image
         filtered_image = np.zeros_like(image, dtype=np.float64)
@@ -102,7 +100,7 @@ def filtre_gaussian(image, kernel_size=5, sigma=1.0):
         padded_image = np.pad(image, ((k, k), (k, k), (0, 0)), mode='constant')
     else:
         raise ValueError("Unsupported image shape.")
-    
+
     # Convolution
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
@@ -113,10 +111,10 @@ def filtre_gaussian(image, kernel_size=5, sigma=1.0):
                 for c in range(image.shape[2]):
                     region = padded_image[i:i + kernel_size, j:j + kernel_size, c]
                     filtered_image[i, j, c] = np.sum(region * gaussian_kernel)
-    
+
     # Clip values to valid range
     filtered_image = np.clip(filtered_image, 0, 255).astype(np.uint8)
-    
+
     return filtered_image
 
 # Fonction de filtre Min-Max
@@ -132,7 +130,7 @@ def filtre_min_max(img, window_size):
             window = []
             for k in range(-offset, offset + 1):
                 for l in range(-offset, offset + 1):
-                    if 0 <= i + k < m and 0 <= j + l < n:
+                    if (k != 0 or l != 0) and (0 <= i + k < m and 0 <= j + l < n):
                         window.append(img[i + k, j + l])
 
             i_min = min(window)
@@ -157,6 +155,7 @@ def peack_signal_noise_ration(img_origin, img_bruit):
         return float('inf')
     return 10 * math.log10(255 ** 2 / mse)
 
+
 # Interface Tkinter
 ctk.set_appearance_mode("Dark")
 
@@ -178,18 +177,18 @@ def load_image():
         display_image_with_matplotlib(image_data, image_name)
         print(f"Original Image Name: {image_name}")
     else:
-        messagebox.showerror("No Image","No image selected.")
-        
-        
+        messagebox.showerror("No Image", "No image selected.")
+
+
 # Display Image using Matplotlib
 def display_image_with_matplotlib(image_array, name):
     plt.figure(figsize=(8, 8))
     plt.imshow(image_array, cmap='gray')
     plt.title(name)
     plt.show()
-    
+
 # Display Image in a new CTkToplevel window
-def display_image_in_new_window(image_array,name):
+def display_image_in_new_window(image_array, name):
     if not isinstance(image_array, np.ndarray):
         print("Error: The image data is not in the correct format (not a NumPy array).")
         return
@@ -202,19 +201,18 @@ def display_image_in_new_window(image_array,name):
         new_window = ctk.CTkToplevel(app)
         new_window.title(name)
         new_window.geometry("600x600")  # Adjust size as needed
-        
 
         # Convert the PIL image to CTkImage and store it in a global variable
         global image_tk  # Ensure image_tk is global to retain the reference
-        image_tk = ctk.CTkImage(light_image=image, dark_image=image, size=(600, 600))  
+        image_tk = ctk.CTkImage(light_image=image, dark_image=image, size=(600, 600))
         print("Image converted to CTkImage successfully")
         # Create a label in the new window to display the image
-        image_label = ctk.CTkLabel(new_window, image=image_tk ,text="")
+        image_label = ctk.CTkLabel(new_window, image=image_tk, text="")
         image_label.pack(pady=20)
 
         # Update the window to ensure image loads
         new_window.update()
-        
+
         print("Image displayed successfully in new window")
 
     except Exception as e:
@@ -222,7 +220,7 @@ def display_image_in_new_window(image_array,name):
 
 # Function to handle the noise application
 def apply_noise():
-    global noisy_image ,image_name
+    global noisy_image, image_name
     if image_data is None:
         messagebox.showerror("Image Error", "No image loaded.")
         return
@@ -233,13 +231,13 @@ def apply_noise():
             sigma = float(sigma_entry.get()) if sigma_entry.get() else 0
             noise = bruit_gaussien(0, sigma, image_data.shape[1], image_data.shape[0])
             noisy_image = np.clip(image_data + noise, 0, 255).astype(np.uint8)
-            new_image_name=f"{base_name}_{noise_type} s={sigma}{ext}"
+            new_image_name = f"{base_name}_{noise_type} s={sigma}{ext}"
             cv2.imwrite(new_image_name, noisy_image)
             display_image_with_matplotlib(noisy_image, new_image_name)
         elif noise_type == "Salt & Pepper Noise":
             prob = float(probability_entry.get()) if probability_entry.get() else 0.05
             noisy_image = bruit_poivre_et_sel(image_data, prob)
-            new_image_name=f"{base_name}_{noise_type} p={prob}{ext}"
+            new_image_name = f"{base_name}_{noise_type} p={prob}{ext}"
             cv2.imwrite(new_image_name, noisy_image)
             display_image_with_matplotlib(noisy_image, new_image_name)
         else:
@@ -247,7 +245,7 @@ def apply_noise():
 
 # Function to handle filter application
 def apply_filters():
-    global psnr_values ,image_name
+    global psnr_values, image_name
     if noisy_image is None:
         messagebox.showerror("Image Error", "No image loaded or noise applied.")
         return
@@ -256,49 +254,64 @@ def apply_filters():
     if not filters_selected:
         messagebox.showerror("Filter Error", "No filters selected.")
         return
+    # Initialize the dictionary to store PSNR values for each filter and window size combination
     psnr_values = {}
     for filter_type in filters_selected:
         entry_value = filter_entries[filter_type].get()
         if not entry_value:
             messagebox.showerror("Input Error", f"Value for {filter_type} not specified.")
             return
-        if filter_type == "Mean Filter":
-            filtered_image = filtre_moyen(noisy_image, int(entry_value))
-            new_image_name=f"{base_name}_{filter_type} ws={int(entry_value)}{ext}"
-            cv2.imwrite(new_image_name, filtered_image)
-            display_image_with_matplotlib(filtered_image, new_image_name)
-            psnr_values["Mean Filter"] = peack_signal_noise_ration(image_data, filtered_image)
-        elif filter_type == "Gaussian Filter":
-            sigma = float(sigma_entry.get())
-            filtered_image = filtre_gaussian(noisy_image,kernel_size=5, sigma=sigma) 
-            new_image_name=f"{base_name}_{filter_type} s={sigma}{ext}"
-            cv2.imwrite(new_image_name, filtered_image)
-            display_image_with_matplotlib(filtered_image, new_image_name)
-            psnr_values["Gaussian Filter"] = peack_signal_noise_ration(image_data, filtered_image)
-        elif filter_type == "Median Filter":
-            filtered_image = filtre_median(noisy_image, int(entry_value))
-            new_image_name=f"{base_name}_{filter_type} ws={int(entry_value)}{ext}"
-            cv2.imwrite(new_image_name, filtered_image)
-            display_image_with_matplotlib(filtered_image, new_image_name)
-            psnr_values["Median Filter"] = peack_signal_noise_ration(image_data, filtered_image)
-        elif filter_type == "Min-Max Filter":
-            filtered_image = filtre_min_max(noisy_image, int(entry_value))
-            new_image_name=f"{base_name}_{filter_type} ws={int(entry_value)}{ext}"
-            cv2.imwrite(new_image_name, filtered_image)
-            display_image_with_matplotlib(filtered_image, new_image_name)
-            psnr_values["Min-Max Filter"] = peack_signal_noise_ration(image_data, filtered_image)
-        else:
-            print(f"Invalid filter: {filter_type}")
+
+        window_sizes_or_sigma = [int(i) if i.isdigit() else float(i) for i in entry_value.split(',')]
+        for size_or_sigma in window_sizes_or_sigma:
+            # Apply the filter depending on its type
+            if filter_type == "Mean Filter":
+                filtered_image = filtre_moyen(noisy_image, size_or_sigma)
+                new_image_name = f"{base_name}_{filter_type} ws={size_or_sigma}{ext}"
+                cv2.imwrite(new_image_name, filtered_image)
+                display_image_with_matplotlib(filtered_image, new_image_name)
+                psnr_values[f"{filter_type} ws={size_or_sigma}"] = peack_signal_noise_ration(image_data, filtered_image)
+
+            elif filter_type == "Gaussian Filter":
+                filtered_image = filtre_gaussian(noisy_image, kernel_size=5, sigma=size_or_sigma)
+                new_image_name = f"{base_name}_{filter_type} s={size_or_sigma}{ext}"
+                cv2.imwrite(new_image_name, filtered_image)
+                display_image_with_matplotlib(filtered_image, new_image_name)
+                psnr_values[f"{filter_type} s={size_or_sigma}"] = peack_signal_noise_ration(image_data, filtered_image)
+
+            elif filter_type == "Median Filter":
+                filtered_image = filtre_median(noisy_image, size_or_sigma)
+                new_image_name = f"{base_name}_{filter_type} ws={size_or_sigma}{ext}"
+                cv2.imwrite(new_image_name, filtered_image)
+                display_image_with_matplotlib(filtered_image, new_image_name)
+                psnr_values[f"{filter_type} ws={size_or_sigma}"] = peack_signal_noise_ration(image_data, filtered_image)
+
+            elif filter_type == "Min-Max Filter":
+                filtered_image = filtre_min_max(noisy_image, size_or_sigma)
+                new_image_name = f"{base_name}_{filter_type} ws={size_or_sigma}{ext}"
+                cv2.imwrite(new_image_name, filtered_image)
+                display_image_with_matplotlib(filtered_image, new_image_name)
+                psnr_values[f"{filter_type} ws={size_or_sigma}"] = peack_signal_noise_ration(image_data, filtered_image)
+            else:
+                print(f"Invalid filter: {filter_type}")
+
     display_psnr_results()
+
 
 # Function to display PSNR results
 def display_psnr_results():
     if not psnr_values:
         return
+    # Sort the PSNR values to find the highest one
     best_filter = max(psnr_values, key=psnr_values.get)
     best_psnr = psnr_values[best_filter]
+    # Display the results for each filter and its corresponding PSNR
+    psnr_result = "\n".join([f"{filter_name}: PSNR = {psnr_values[filter_name]:.2f} dB" for filter_name in psnr_values])
+    print(f"PSNR Results:\n{psnr_result}")
     print(f"Best Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
-    messagebox.showinfo("PSNR Results", f"Best Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
+
+    messagebox.showinfo("PSNR Results",
+                        f"PSNR Results:\n{psnr_result}\n\nBest Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
     psnr_label.configure(text=f"Best Filter: {best_filter} with PSNR = {best_psnr:.2f} dB")
 
 # Noise type combobox event
@@ -369,10 +382,11 @@ filter_entries = {}
 
 ctk.CTkLabel(filter_frame, text="Select Filters:").grid(row=0, column=0, padx=10, pady=5)
 for idx, (filter_name, var) in enumerate(filter_vars.items()):
-    checkbox = ctk.CTkCheckBox(filter_frame, text=filter_name, variable=var, 
-                               command=lambda var=var, filter_name=filter_name: toggle_entry(var, filter_entries[filter_name]))
+    checkbox = ctk.CTkCheckBox(filter_frame, text=filter_name, variable=var,
+                               command=lambda var=var, filter_name=filter_name: toggle_entry(var, filter_entries[
+                                   filter_name]))
     checkbox.grid(row=0, column=idx + 1, padx=10, pady=5)
-    
+
     # Create an entry field for the filter (initially disabled)
     entry = ctk.CTkEntry(filter_frame, state="disabled", placeholder_text=f"Enter value for {filter_name}")
     entry.grid(row=1, column=idx + 1, padx=10, pady=5)

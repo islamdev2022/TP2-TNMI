@@ -23,14 +23,34 @@ def bruit_gaussien(mu, sigma, largeur, hauteur):
 # Fonction pour générer du bruit de poivre et sel
 def bruit_poivre_et_sel(image, prob):
     noisy_image = np.copy(image)
-    for i in range(noisy_image.shape[0]):
-        for j in range(noisy_image.shape[1]):
-            rand = random.random()
-            if rand < prob:
-                noisy_image[i][j] = 0  # Poivre
-            elif rand > 1 - prob:
-                noisy_image[i][j] = 255  # Sel
+    total_pixels = noisy_image.size
+    num_noisy_pixels = int(total_pixels * prob)
+
+    # Calcul des pixels de poivre et de sel
+    num_poivre = num_noisy_pixels // 2
+    num_sel = num_noisy_pixels - num_poivre
+
+    # Indices aléatoires pour le bruit
+    indices = np.random.choice(total_pixels, num_noisy_pixels, replace=False)
+    sel_indices = indices[:num_sel]
+    poivre_indices = indices[num_sel:]
+
+    # Application du bruit
+    noisy_image.flat[sel_indices] = 255  # Sel
+    noisy_image.flat[poivre_indices] = 0  # Poivre
+
     return noisy_image
+
+# def bruit_poivre_et_sel(image, prob):
+#     noisy_image = np.copy(image)
+#     for i in range(noisy_image.shape[0]):
+#         for j in range(noisy_image.shape[1]):
+#             rand = random.random()
+#             if rand < prob:
+#                 noisy_image[i][j] = 0  # Poivre
+#             elif rand > 1 - prob:
+#                 noisy_image[i][j] = 255  # Sel
+#     return noisy_image
 
 # Filtre médian
 def filtre_median(img, window_size):
